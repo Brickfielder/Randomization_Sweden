@@ -97,11 +97,11 @@
     </div>
   </div>
 
-  <!-- Single, final script block -->
+  <!-- Full script -->
   <script>
   (function(){
     const API_BASE = '/api';
-    const TOKEN = 'b83c7f5d4a29e6c14f928d07aeb16c3f2d6a9f0b58c472e1'; // <-- replace with your exact Netlify env var value
+    const TOKEN = 'b83c7f5d4a29e6c14f928d07aeb16c3f2d6a9f0b58c472e1'; // <-- replace with your Netlify env var if needed
 
     const els = {
       status: document.getElementById('statusBox'),
@@ -113,13 +113,12 @@
       last: document.getElementById('lastAlloc'),
     };
 
-    // Guard: ensure DOM IDs exist (helps catch mismatches)
     if (!els.form || !els.pid || !els.seqLen || !els.table || !els.goBtn || !els.status || !els.last) {
       console.error('V-CARE: Required DOM elements not found. Check element IDs in HTML.');
       return;
     }
 
-    // Update footer and load initial log
+    // Show sequence length
     els.seqLen.textContent = String(96);
     refreshLog();
 
@@ -157,4 +156,38 @@
         const res = await fetch(`${API_BASE}/export?format=json`);
         const data = await res.json();
         render(data?.log || []);
+      }catch{
+        els.table.innerHTML = '<tr><td colspan="4">Could not load log</td></tr>';
       }
+    }
+
+    function render(log){
+      const next = log.length + 1, total = 96, remaining = total - log.length;
+      els.status.innerHTML = `Next in sequence: <b>${next}</b> of <b>${total}</b> • Remaining: <b>${remaining}</b>${remaining===0? ' • <span class="warn">Sequence complete</span>' : ''}`;
+
+      const last = log[log.length-1];
+      els.last.innerHTML = last
+        ? `Last allocation: <span class="mono">#${String(last.seq).padStart(3,'0')}</span> — <strong>${escapeHtml(last.participant_id)}</strong> → <strong class="${last.condition==='V-CARE'?'alloc-VCARE':'alloc-INFO'}">${last.condition}</strong> at ${new Date(last.timestamp).toUTCString()}`
+        : 'No allocations yet.';
+
+      els.table.innerHTML = log.map(r=>{
+        const cls = r.condition==='V-CARE' ? 'alloc-VCARE' : 'alloc-INFO';
+        return `<tr>
+          <td class="mono">${String(r.seq).padStart(3,'0')}</td>
+          <td class="mono">${escapeHtml(r.participant_id)}</td>
+          <td class="${cls}">${r.condition}</td>
+          <td class="mono">${r.timestamp}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function escapeHtml(s){
+      return String(s).replace(/[&<>\"']/g, c => (
+        {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+      ));
+    }
+  })();
+  </script>
+</body>
+</html>
+
