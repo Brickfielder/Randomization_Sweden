@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>V-CARE - Virtual Care after REsuscitation (Sweden) — Randomization</title>
+  <meta name="description" content="Randomization web app for V-CARE (Sweden). Enter Participant ID to allocate per pre-generated sequence. Exports CSV and persists centrally via Netlify." />
+  <style>
+    :root{
+      --bg:#ffffff;
+      --card:#fbeaec;
+      --card-ink:#1b1b1f;
+      --accent:#8c0f24;
+      --muted:#5a5f6a;
+      --ring:#e6ccd1;
+      --ok:#0b8c3b;
+      --warn:#c25a00;
+      --err:#b00020;
+      --radius:18px;
+      --shadow:0 12px 30px rgba(0,0,0,.10);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;background:var(--bg);color:var(--card-ink);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif}
+    .wrap{max-width:980px;margin:32px auto;padding:20px}
+    .card{background:var(--card);border:1px solid var(--ring);border-radius:var(--radius);box-shadow:var(--shadow);padding:28px}
+    .title{display:flex;align-items:center;gap:12px;justify-content:center;text-align:center;margin-bottom:6px}
+    .title .badge{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid #eee;background:#fff;border-radius:999px;font-weight:700}
+    h1{font-size:clamp(1.4rem, 2.2vw + .6rem, 2rem);margin:4px 0 2px;letter-spacing:.2px}
+    h2{font-size:1.1rem;margin:0;color:var(--muted)}
+    .scope{display:block;text-align:center;margin:8px auto 18px;color:var(--muted);font-size:.98rem}
+    .grid{display:grid;grid-template-columns: 1fr auto;gap:14px;align-items:end;margin:12px 0 12px}
+    label{font-weight:600;display:block;margin-bottom:6px}
+    input[type="text"]{width:100%;padding:12px 14px;border-radius:12px;border:1px solid #ddd;background:#fff;outline:none}
+    input[type="text"]:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb, var(--accent), transparent 80%)}
+    .btn{appearance:none;border:1px solid var(--accent);background:var(--accent);color:#fff;padding:12px 16px;border-radius:12px;font-weight:700;cursor:pointer}
+    .btn[disabled]{opacity:.55;cursor:not-allowed}
+    .btn.secondary{background:#fff;color:var(--accent)}
+    .btn.ghost{background:transparent;color:var(--accent);border-color:var(--ring)}
+    .hint{font-size:.9rem;color:var(--muted)}
+    .status{margin:6px 0 12px;padding:10px 12px;border-radius:12px;background:#fff;border:1px dashed var(--ring)}
+    .status b{font-family:var(--mono)}
+    table{width:100%;border-collapse:separate;border-spacing:0 8px;margin-top:8px}
+    th,td{text-align:left;padding:12px 14px;background:#fff;border:1px solid #eee}
+    th{position:sticky;top:0;background:#fff;z-index:1}
+    tr>td:first-child, tr>th:first-child{border-top-left-radius:10px;border-bottom-left-radius:10px}
+    tr>td:last-child, tr>th:last-child{border-top-right-radius:10px;border-bottom-right-radius:10px}
+    .mono{font-family:var(--mono)}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#fff;border:1px solid var(--ring);font-weight:700}
+    .alloc-VCARE{color:var(--ok)}
+    .alloc-INFO{color:#1847ab}
+    .footer{margin-top:18px;color:var(--muted);font-size:.9rem}
+    .warn{color:var(--warn)}
+    .err{color:var(--err)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="title">
+        <span class="badge">V-CARE • Randomization</span>
+      </div>
+      <h1>V-CARE – Virtual Care after <span style="text-decoration:underline wavy;color:var(--accent)">RE</span>suscitation</h1>
+      <h2>Sequence-based allocation for the Sweden arm</h2>
+      <span class="scope">Scope: This web app is only for randomizing patients recruited in <strong>Sweden</strong>.</span>
+
+      <div class="status" id="statusBox" aria-live="polite"></div>
+
+      <form id="allocForm" autocomplete="off">
+        <div class="grid">
+          <div>
+            <label for="pid">Participant ID <span class="hint">(e.g., site code + number)</span></label>
+            <input id="pid" name="pid" type="text" inputmode="latin" placeholder="e.g., STHLM-001 or 2025-0001" required />
+          </div>
+          <div>
+            <button id="goBtn" type="submit" class="btn">Randomize & Add</button>
+          </div>
+        </div>
+        <div class="hint">No duplicates allowed. Allocation follows a fixed pre-generated sequence stored on the server.</div>
+      </form>
+
+      <div id="lastAlloc" class="hint" style="margin-top:10px"></div>
+
+      <div style="max-height:420px;overflow:auto;margin-top:10px">
+        <table aria-label="Allocations to date">
+          <thead>
+            <tr>
+              <th style="width:80px">Seq #</th>
+              <th>Participant ID</th>
+              <th>Allocation</th>
+              <th>Timestamp (UTC)</th>
+            </tr>
+          </thead>
+          <tbody id="allocTable"></tbody>
+        </table>
+      </div>
+
+      <div class="footer">
+        <p>Allocation labels: <span class="pill">1 → V-CARE</span> <span class="pill">2 → Information Booklet</span>. Sequence length is <span id="seqLen">—</span>. Built for the V-CARE study (Sweden).</p>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const API_BASE = '/api';
+  const TOKEN = 'b83c7f5d4a29e6c14f928d07aeb16c3f2d6a9f0b58c472e1'; // use same as Netlify env var
+
+  const els = {
+    status: document.getElementById('statusBox'),
+    table: document.getElementById('allocTable'),
+    seqLen: document.getElementById('seqLen'),
+    form: document.getElementById('allocForm'),
+    pid: document.getElementById('pid'),
+    goBtn: document.getElementById('goBtn'),
+    last: document.getElementById('lastAlloc'),
+  };
+
+  els.seqLen.textContent = String(96); // number of allocations in sequence
+
+  refreshLog();
+
+  els.form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const idRaw = els.pid.value.trim();
+    if(!idRaw){ alert('Please enter a Participant ID.'); return; }
+    if(/[,]/.test(idRaw)){ alert('Commas are not allowed in IDs.'); return; }
+
+    els.goBtn.disabled = true;
+    try{
+      const res = await fetch(`${API_BASE}/allocate`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'authorization': `Bearer ${TOKEN}`
+        },
+        body: JSON.stringify({ participant_id: idRaw })
+      });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data?.error || 'Allocation failed');
+      els.pid.value = '';
+      await refreshLog();
+      els.pid.focus();
+    }catch(err){
+      alert(err.message);
+    }finally{
+      els.goBtn.disabled = false;
+    }
+  });
+
+  async function refreshLog(){
+    els.table.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+    try{
+      const res = await fetch(`${API_BASE}/export?format=json`);
+      const data = await res.json();
+      const log = data?.log || [];
+      render(log);
+    }catch{
+      els.table.innerHTML = '<tr><td colspan="4">Could not load log</td></tr>';
+    }
+  }
+
+  function render(log){
+    const next = log.length + 1;
+    const total = 96;
+    const remaining = total - log.length;
+    els.status.innerHTML = `Next in sequence: <b>${next}</b> of <b>${total}</b> • Remaining: <b>${remaining}</b>${remaining===0? ' • <span class="warn">Sequence complete</span>' : ''}`;
+
+    const last = log[log.length-1];
+    els.last.innerHTML = last
+      ? `Last allocation: <span class="mono">#${String(last.seq).padStart(3,'0')}</span> — <strong>${escapeHtml(last.participant_id)}</strong> → <strong class="${last.condition==='V-CARE'?'alloc-VCARE':'alloc-INFO'}">${last.condition}</strong> at ${new Date(last.timestamp).toUTCString()}`
+      : 'No allocations yet.';
+
+    els.table.innerHTML = log.map(r=>{
+      const cls = r.condition==='V-CARE' ? 'alloc-VCARE' : 'alloc-INFO';
+      return `<tr>
+        <td class="mono">${String(r.seq).padStart(3,'0')}</td>
+        <td class="mono">${escapeHtml(r.participant_id)}</td>
+        <td class="${cls}">${r.condition}</td>
+        <td class="mono">${r.timestamp}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\\'':'&#39;'}[c]));
+  }
+})();
+</script>
+</body>
+</html>
