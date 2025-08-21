@@ -98,11 +98,11 @@
     </div>
   </div>
 
-  <!-- Single, final script block -->
+  <!-- Script -->
   <script>
   (function(){
     const API_BASE = '/api';
-    const TOKEN = 'b83c7f5d4a29e6c14f928d07aeb16c3f2d6a9f0b58c472e1'; // replace if you rotate your token
+    const TOKEN = 'b83c7f5d4a29e6c14f928d07aeb16c3f2d6a9f0b58c472e1'; // update if you rotate
 
     const els = {
       status: document.getElementById('statusBox'),
@@ -119,9 +119,17 @@
       return;
     }
 
-    // Initialize status & table
+    // --- Auto-refresh support ---
+    let refreshTimer = null;
+    function startAutoRefresh(){ stopAutoRefresh(); refreshTimer = setInterval(refreshLog, 5000); }
+    function stopAutoRefresh(){ if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; } }
+    document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState === 'visible') refreshLog(); });
+    window.addEventListener('focus', refreshLog);
+
+    // Initialize
     els.seqLen.textContent = String(96);
     refreshLog();
+    startAutoRefresh();
 
     // Submit handler
     els.form.addEventListener('submit', async (e)=>{
@@ -143,7 +151,7 @@
         const data = await res.json();
         if(!res.ok) throw new Error(data?.error || 'Allocation failed');
         els.pid.value = '';
-        await refreshLog();
+        await refreshLog();     // immediate update for this user
         els.pid.focus();
       }catch(err){
         alert(err.message);
@@ -152,11 +160,13 @@
       }
     });
 
-    // Load log & render
+    // Load log with cache-busting and no-store
     async function refreshLog(){
-      els.table.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
       try{
-        const res = await fetch(`${API_BASE}/export?format=json`);
+        const res = await fetch(`${API_BASE}/export?format=json&t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: { 'cache-control': 'no-cache' }
+        });
         const data = await res.json();
         render(Array.isArray(data?.log) ? data.log : []);
       }catch(err){
@@ -165,7 +175,6 @@
     }
 
     function render(log){
-      // Status panel (next/remaining)
       const total = 96;
       const next = log.length + 1;
       const remaining = Math.max(0, total - log.length);
@@ -179,7 +188,7 @@
 
       els.table.innerHTML = log.map(row=>{
         const seq = String(row.seq).padStart(3,'0');
-        const cond = row.condition; // <- use server field name
+        const cond = row.condition;
         const cls  = cond === 'V-CARE' ? 'alloc-VCARE' : 'alloc-INFO';
         return `<tr>
           <td class="mono">${seq}</td>
@@ -200,3 +209,4 @@
   </script>
 </body>
 </html>
+
