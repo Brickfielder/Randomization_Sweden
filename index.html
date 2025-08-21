@@ -23,10 +23,17 @@
     html,body{margin:0;background:var(--bg);color:var(--card-ink);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif}
     .wrap{max-width:980px;margin:32px auto;padding:20px}
     .card{background:var(--card);border:1px solid var(--ring);border-radius:var(--radius);box-shadow:var(--shadow);padding:28px}
-    .title{display:flex;align-items:center;gap:12px;justify-content:center;text-align:center;margin-bottom:6px}
+    .title{text-align:center;margin-bottom:12px}
     .title .badge{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid #eee;background:#fff;border-radius:999px;font-weight:700}
-    h1{font-size:clamp(1.4rem, 2.2vw + .6rem, 2rem);margin:4px 0 2px;letter-spacing:.2px}
-    h2{font-size:1.1rem;margin:0;color:var(--muted)}
+    h1{font-size:clamp(1.6rem, 2.5vw + .6rem, 2.2rem);margin:10px 0 6px;letter-spacing:.2px;text-align:center}
+    h2{font-size:1.1rem;margin:0;color:var(--muted);text-align:center}
+    .re-accent{
+      color: var(--accent);
+      text-decoration: underline;
+      text-underline-offset: .25em;
+      text-decoration-thickness: 2px;
+      text-decoration-color: var(--accent);
+    }
     .scope{display:block;text-align:center;margin:8px auto 18px;color:var(--muted);font-size:.98rem}
     .grid{display:grid;grid-template-columns: 1fr auto;gap:14px;align-items:end;margin:12px 0 12px}
     label{font-weight:600;display:block;margin-bottom:6px}
@@ -46,7 +53,7 @@
     .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#fff;border:1px solid var(--ring);font-weight:700}
     .alloc-VCARE{color:var(--ok)}
     .alloc-INFO{color:#1847ab}
-    .footer{margin-top:18px;color:var(--muted);font-size:.9rem}
+    .footer{margin-top:18px;color:var(--muted);font-size:.9rem;text-align:center}
     .warn{color:var(--warn)}
   </style>
 </head>
@@ -56,7 +63,9 @@
       <div class="title">
         <span class="badge">V-CARE • Randomization</span>
       </div>
-      <h1>V-CARE – Virtual Care after <span style="text-decoration:underline wavy;color:var(--accent)">RE</span>suscitation</h1>
+      <h1>
+        V-CARE – Virtual Care after <span class="re-accent" spellcheck="false">RE</span>suscitation
+      </h1>
       <h2>Sequence-based allocation for the Sweden arm</h2>
       <span class="scope">Scope: This web app is only for randomizing patients recruited in <strong>Sweden</strong>.</span>
 
@@ -97,11 +106,11 @@
     </div>
   </div>
 
-  <!-- Full script -->
+  <!-- Single, final script block -->
   <script>
   (function(){
     const API_BASE = '/api';
-    const TOKEN = 'b83c7f5d4a29e6c14f928d07aeb16c3f2d6a9f0b58c472e1'; // <-- replace with your Netlify env var if needed
+    const TOKEN = 'b83c7f5d4a29e6c14f928d07aeb16c3f2d6a9f0b58c472e1'; // replace with your Netlify env var
 
     const els = {
       status: document.getElementById('statusBox'),
@@ -114,11 +123,10 @@
     };
 
     if (!els.form || !els.pid || !els.seqLen || !els.table || !els.goBtn || !els.status || !els.last) {
-      console.error('V-CARE: Required DOM elements not found. Check element IDs in HTML.');
+      console.error('V-CARE: Required DOM elements not found.');
       return;
     }
 
-    // Show sequence length
     els.seqLen.textContent = String(96);
     refreshLog();
 
@@ -156,38 +164,31 @@
         const res = await fetch(`${API_BASE}/export?format=json`);
         const data = await res.json();
         render(data?.log || []);
-      }catch{
-        els.table.innerHTML = '<tr><td colspan="4">Could not load log</td></tr>';
+      }catch(err){
+        els.table.innerHTML = `<tr><td colspan="4" class="warn">Error: ${err.message}</td></tr>`;
       }
     }
 
     function render(log){
-      const next = log.length + 1, total = 96, remaining = total - log.length;
-      els.status.innerHTML = `Next in sequence: <b>${next}</b> of <b>${total}</b> • Remaining: <b>${remaining}</b>${remaining===0? ' • <span class="warn">Sequence complete</span>' : ''}`;
-
-      const last = log[log.length-1];
-      els.last.innerHTML = last
-        ? `Last allocation: <span class="mono">#${String(last.seq).padStart(3,'0')}</span> — <strong>${escapeHtml(last.participant_id)}</strong> → <strong class="${last.condition==='V-CARE'?'alloc-VCARE':'alloc-INFO'}">${last.condition}</strong> at ${new Date(last.timestamp).toUTCString()}`
-        : 'No allocations yet.';
-
-      els.table.innerHTML = log.map(r=>{
-        const cls = r.condition==='V-CARE' ? 'alloc-VCARE' : 'alloc-INFO';
+      if(!Array.isArray(log) || !log.length){
+        els.table.innerHTML = '<tr><td colspan="4">No allocations yet.</td></tr>';
+        els.last.textContent = '';
+        return;
+      }
+      els.table.innerHTML = log.map(row=>{
         return `<tr>
-          <td class="mono">${String(r.seq).padStart(3,'0')}</td>
-          <td class="mono">${escapeHtml(r.participant_id)}</td>
-          <td class="${cls}">${r.condition}</td>
-          <td class="mono">${r.timestamp}</td>
+          <td class="mono">#${String(row.seq).padStart(3,'0')}</td>
+          <td>${row.participant_id}</td>
+          <td class="${row.allocation==='V-CARE'?'alloc-VCARE':'alloc-INFO'}">${row.allocation}</td>
+          <td class="mono">${row.timestamp}</td>
         </tr>`;
       }).join('');
-    }
-
-    function escapeHtml(s){
-      return String(s).replace(/[&<>\"']/g, c => (
-        {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
-      ));
+      const last = log[log.length-1];
+      els.last.innerHTML = `Last allocation: #${String(last.seq).padStart(3,'0')} — <b>${last.participant_id}</b> → <b>${last.allocation}</b> at ${new Date(last.timestamp).toUTCString()}`;
     }
   })();
   </script>
 </body>
 </html>
+
 
