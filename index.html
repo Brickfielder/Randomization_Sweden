@@ -14,18 +14,19 @@
       --muted:#5a5f6a;
       --ring:#e6ccd1;
       --ok:#0b8c3b;
+      --info:#1847ab;
       --warn:#c25a00;
       --radius:18px;
       --shadow:0 12px 30px rgba(0,0,0,.10);
-      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --mono: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
     }
     *{box-sizing:border-box}
     html,body{margin:0;background:var(--bg);color:var(--card-ink);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif}
     .wrap{max-width:980px;margin:32px auto;padding:20px}
     .card{background:var(--card);border:1px solid var(--ring);border-radius:var(--radius);box-shadow:var(--shadow);padding:28px}
-    .title{display:flex;align-items:center;gap:12px;justify-content:center;text-align:center;margin-bottom:6px}
+    .title{text-align:center;margin-bottom:12px}
     .title .badge{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid #eee;background:#fff;border-radius:999px;font-weight:700}
-    h1{font-size:clamp(1.6rem, 2.2vw + .6rem, 2.2rem);margin:8px 0;text-align:center}
+    h1{font-size:clamp(1.6rem,2.4vw + .6rem,2.2rem);margin:10px 0 6px;text-align:center;letter-spacing:.2px}
     h2{font-size:1.1rem;margin:0;color:var(--muted);text-align:center}
     .scope{display:block;text-align:center;margin:8px auto 18px;color:var(--muted);font-size:.98rem}
     .grid{display:grid;grid-template-columns: 1fr auto;gap:14px;align-items:end;margin:12px 0 12px}
@@ -44,8 +45,8 @@
     tr>td:last-child, tr>th:last-child{border-top-right-radius:10px;border-bottom-right-radius:10px}
     .mono{font-family:var(--mono)}
     .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#fff;border:1px solid var(--ring);font-weight:700}
-    .alloc-VCARE{color:var(--ok)}
-    .alloc-INFO{color:#1847ab}
+    .alloc-VCARE{color:var(--ok);font-weight:700}
+    .alloc-INFO{color:var(--info);font-weight:700}
     .footer{margin-top:18px;color:var(--muted);font-size:.9rem;text-align:center}
     .warn{color:var(--warn)}
   </style>
@@ -97,11 +98,11 @@
     </div>
   </div>
 
-  <!-- Script -->
+  <!-- Single, final script block -->
   <script>
   (function(){
     const API_BASE = '/api';
-    const TOKEN = 'b83c7f5d4a29e6c14f928d07aeb16c3f2d6a9f0b58c472e1'; // replace with your Netlify env var if needed
+    const TOKEN = 'b83c7f5d4a29e6c14f928d07aeb16c3f2d6a9f0b58c472e1'; // replace if you rotate your token
 
     const els = {
       status: document.getElementById('statusBox'),
@@ -118,9 +119,11 @@
       return;
     }
 
+    // Initialize status & table
     els.seqLen.textContent = String(96);
     refreshLog();
 
+    // Submit handler
     els.form.addEventListener('submit', async (e)=>{
       e.preventDefault();
       const idRaw = els.pid.value.trim();
@@ -149,39 +152,51 @@
       }
     });
 
+    // Load log & render
     async function refreshLog(){
       els.table.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
       try{
         const res = await fetch(`${API_BASE}/export?format=json`);
         const data = await res.json();
-        render(data?.log || []);
+        render(Array.isArray(data?.log) ? data.log : []);
       }catch(err){
         els.table.innerHTML = `<tr><td colspan="4" class="warn">Error loading log</td></tr>`;
       }
     }
 
     function render(log){
-      if (!Array.isArray(log) || log.length === 0) {
+      // Status panel (next/remaining)
+      const total = 96;
+      const next = log.length + 1;
+      const remaining = Math.max(0, total - log.length);
+      els.status.innerHTML = `Next in sequence: <b>${next}</b> of <b>${total}</b> • Remaining: <b>${remaining}</b>${remaining===0 ? ' • <span class="warn">Sequence complete</span>' : ''}`;
+
+      if (log.length === 0) {
         els.table.innerHTML = '<tr><td colspan="4">No allocations yet</td></tr>';
         els.last.textContent = '';
         return;
       }
+
       els.table.innerHTML = log.map(row=>{
+        const seq = String(row.seq).padStart(3,'0');
+        const cond = row.condition; // <- use server field name
+        const cls  = cond === 'V-CARE' ? 'alloc-VCARE' : 'alloc-INFO';
         return `<tr>
-          <td class="mono">${String(row.seq).padStart(3,'0')}</td>
-          <td>${row.participant_id}</td>
-          <td>${row.allocation}</td>
-          <td>${row.timestamp}</td>
+          <td class="mono">${seq}</td>
+          <td>${escapeHtml(row.participant_id)}</td>
+          <td class="${cls}">${escapeHtml(cond)}</td>
+          <td class="mono">${escapeHtml(row.timestamp)}</td>
         </tr>`;
       }).join('');
 
       const last = log[log.length-1];
-      els.last.innerHTML = `Last allocation: #${String(last.seq).padStart(3,'0')} — <b>${last.participant_id}</b> → <b>${last.allocation}</b> at ${last.timestamp}`;
+      els.last.innerHTML = `Last allocation: #${String(last.seq).padStart(3,'0')} — <b>${escapeHtml(last.participant_id)}</b> → <b>${escapeHtml(last.condition)}</b> at ${new Date(last.timestamp).toUTCString()}`;
+    }
+
+    function escapeHtml(s){
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
   })();
   </script>
 </body>
 </html>
-
-
-
