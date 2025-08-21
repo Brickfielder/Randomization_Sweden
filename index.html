@@ -186,11 +186,10 @@
     return String(s).replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\\'':'&#39;'}[c]));
   }
 })();
-</script>
-  <script>
+<script>
 (function(){
   const API_BASE = '/api';
-  const TOKEN = 'b83c7f5d4a29e6c14f928d07aeb16c3f2d6a9f0b58c472e1';
+  const TOKEN = 'b83c7f5d4a29e6c14f928d07aeb16c3f2d6a9f0b58c472e1';  // must match Netlify env var
 
   const els = {
     status: document.getElementById('statusBox'),
@@ -201,6 +200,12 @@
     goBtn: document.getElementById('goBtn'),
     last: document.getElementById('lastAlloc'),
   };
+
+  // If any required element is missing, stop (prevents silent failure)
+  if (!els.form || !els.pid || !els.seqLen || !els.table) {
+    console.error('V-CARE: Required DOM elements not found. Check element IDs.');
+    return;
+  }
 
   els.seqLen.textContent = String(96);
   refreshLog();
@@ -261,6 +266,5 @@
   }
 })();
 </script>
-
 </body>
 </html>
