@@ -102,7 +102,7 @@
   <script>
   (function(){
     const API_BASE = '/api';
-    const TOKEN = 'b83c7f5d4a29e6c14f928d07aeb16c3f2d6a9f0b58c472e1'; // update if you rotate
+    const TOKEN_KEY = 'vcare_api_token';
 
     const els = {
       status: document.getElementById('statusBox'),
@@ -140,11 +140,10 @@
 
       els.goBtn.disabled = true;
       try{
-        const res = await fetch(`${API_BASE}/allocate`, {
+        const res = await fetchWithAuth(`${API_BASE}/allocate`, {
           method: 'POST',
           headers: {
-            'content-type': 'application/json',
-            'authorization': `Bearer ${TOKEN}`
+            'content-type': 'application/json'
           },
           body: JSON.stringify({ participant_id: idRaw })
         });
@@ -205,8 +204,34 @@
     function escapeHtml(s){
       return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
+
+    function getToken(){
+      return sessionStorage.getItem(TOKEN_KEY) || '';
+    }
+
+    async function fetchWithAuth(url, options){
+      const attempt = await doFetch(url, options);
+      if (attempt.status !== 401) return attempt;
+
+      const existingToken = getToken();
+      const promptText = existingToken
+        ? 'Invalid or missing token. Enter the API token to continue:'
+        : 'This action requires an API token. Enter the token to continue:';
+      const entered = window.prompt(promptText);
+      if (!entered) return attempt;
+      sessionStorage.setItem(TOKEN_KEY, entered);
+      return doFetch(url, options);
+    }
+
+    function doFetch(url, options){
+      const token = getToken();
+      const headers = { ...(options?.headers || {}) };
+      if (token) {
+        headers.authorization = `Bearer ${token}`;
+      }
+      return fetch(url, { ...options, headers });
+    }
   })();
   </script>
 </body>
 </html>
-
